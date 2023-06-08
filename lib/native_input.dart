@@ -223,9 +223,6 @@ class _NativeInputState extends State<NativeInput> {
       cssProperties.add('text-decoration: ${textDecorations.join(' ')}');
     }
 
-    cssProperties.add('height: 50%');
-    cssProperties.add('width: 50%');
-
     return cssProperties.join('; ');
   }
 
