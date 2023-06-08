@@ -14,64 +14,101 @@ import 'package:flutter/widgets.dart';
 class NativeInput extends StatefulWidget {
   NativeInput({
     super.key,
-    this.password = false,
     required this.controller,
     required this.focusNode,
     required this.style,
     required this.cursorColor,
     required this.backgroundCursorColor,
+    this.readOnly = false,
+    this.obscuringCharacter = '•', // how to support?
+    this.obscureText = false,
+    this.textAlign = TextAlign.start,
+    this.autofocus = false,
+    this.onChanged,
+    this.maxLines = 1,
   }) {
     viewType = '__webNativeInputViewType__${const Uuid().v4()}';
   }
 
-  final bool password;
   final TextEditingController controller;
   final FocusNode focusNode;
   final TextStyle style;
   final Color cursorColor;
   final Color backgroundCursorColor;
   late final String viewType;
+  final bool readOnly;
+  final String obscuringCharacter;
+  final bool obscureText;
+  final TextAlign textAlign;
+  final bool autofocus;
+  final ValueChanged<String>? onChanged;
+  final int maxLines;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
 }
 
 class _NativeInputState extends State<NativeInput> {
-  late html.InputElement inputEl;
+  late html.HtmlElement inputEl;
+  html.InputElement? _inputElement;
+  html.TextAreaElement? _textAreaElement;
 
   @override
   void initState() {
     super.initState();
 
     // create input element + init styling
-    inputEl = html.InputElement();
+
+    // conditionally create <textarea> or <input>
+    if (widget.maxLines > 1) {
+      _textAreaElement = html.TextAreaElement();
+      _textAreaElement!.rows = widget.maxLines;
+      inputEl = _textAreaElement!;
+    } else {
+      _inputElement = html.InputElement();
+      _inputElement!.readOnly = widget.readOnly;
+
+      if (widget.obscureText) {
+        _inputElement!.type = 'password';
+      }
+
+      inputEl = _inputElement!;
+    }
+
+    // style based on TextStyle
     inputEl.style.cssText = textStyleToCss(widget.style);
 
+    // reset input styles
     inputEl.style
       ..width = '100%'
       ..height = '100%'
       ..setProperty('caret-color', colorToCss(widget.cursorColor))
       ..outline = 'none'
       ..border = 'none'
-      ..padding = '0';
+      ..padding = '0'
+      ..textAlign = widget.textAlign.name;
 
-    if (widget.password) {
-      inputEl.type = 'password';
-      inputEl.style.border = '1px solid red'; // debug
+    
+    // debug
+    if(widget.obscureText){
+      _inputElement!.style.border = '1px solid red'; // debug
     }
 
     // listen for events
     inputEl.onInput.listen((e) {
-      widget.controller.text = inputEl.value!;
+      final String currentText = getElementValue();
+      widget.controller.text = currentText;
+
+      if (widget.onChanged != null) {
+        widget.onChanged?.call(currentText);
+      }
     });
 
     inputEl.onFocus.listen((e) {
-      print('onFocus event for type{${inputEl.type}}');
       widget.focusNode.requestFocus();
     });
 
     inputEl.onBlur.listen((e) {
-      print('onBlur event for type{${inputEl.type}}');
       widget.focusNode.unfocus();
     });
 
@@ -83,19 +120,23 @@ class _NativeInputState extends State<NativeInput> {
     // add listeners for controller and focus
     widget.controller.addListener(_controllerListener);
     widget.focusNode.addListener(_focusListener);
+
+    if (widget.autofocus) {
+      WidgetsBinding.instance!.addPostFrameCallback((_) {
+        inputEl.focus();
+      });
+    }
   }
 
   void _controllerListener() {
     final String text = widget.controller.text;
-    inputEl.value = text;
+    setElementValue(text);
   }
 
   void _focusListener() {
     if (widget.focusNode.hasFocus) {
-      print('calling inputEl.focus() type{${inputEl.type}}');
       inputEl.focus();
     } else {
-      print('calling inputEl.blur() type{${inputEl.type}}');
       inputEl.blur();
     }
   }
@@ -107,6 +148,20 @@ class _NativeInputState extends State<NativeInput> {
     widget.focusNode.removeListener(_focusListener);
 
     super.dispose();
+  }
+
+  String getElementValue() {
+    return (widget.maxLines > 1
+        ? _textAreaElement!.value
+        : _inputElement!.value) as String;
+  }
+
+  void setElementValue(String value) {
+    if (widget.maxLines > 1) {
+      _textAreaElement!.value = value;
+    } else {
+      _inputElement!.value = value;
+    }
   }
 
   String colorToCss(Color color) {
@@ -171,8 +226,6 @@ class _NativeInputState extends State<NativeInput> {
     cssProperties.add('height: 50%');
     cssProperties.add('width: 50%');
 
-    print('css properties: ${cssProperties.join('; ')}');
-
     return cssProperties.join('; ');
   }
 
@@ -184,10 +237,8 @@ class _NativeInputState extends State<NativeInput> {
         // needed to fix the bug where we need to hit shift+tab twice to switch focus
         if (e is RawKeyDownEvent && e.logicalKey == LogicalKeyboardKey.tab) {
           if (e.isShiftPressed) {
-            print('Shift + Tab key event');
             Focus.of(context).previousFocus();
           } else {
-            print('Tab key event');
             Focus.of(context).nextFocus();
           }
 
