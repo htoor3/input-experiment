@@ -22,7 +22,7 @@ class NativeInput extends StatefulWidget {
     required this.focusNode,
     required this.style,
     required this.cursorColor,
-    required this.backgroundCursorColor,
+    required this.backgroundCursorColor, // not supported on web
     this.readOnly = false,
     this.obscuringCharacter = '•', // how to support?
     this.obscureText = false,
@@ -31,6 +31,8 @@ class NativeInput extends StatefulWidget {
     this.onChanged,
     this.maxLines = 1, // issues with height calc + fonts
     this.textCapitalization = TextCapitalization.none,
+    this.keyboardAppearance = Brightness.light, // not supported on web
+    this.selectionColor,
   }) {
     viewType = '__webNativeInputViewType__${const Uuid().v4()}';
   }
@@ -49,6 +51,8 @@ class NativeInput extends StatefulWidget {
   final ValueChanged<String>? onChanged;
   final int maxLines;
   final TextCapitalization textCapitalization;
+  final Brightness keyboardAppearance;
+  final Color? selectionColor;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -70,6 +74,7 @@ class _NativeInputState extends State<NativeInput> {
     if (widget.maxLines > 1) {
       _textAreaElement = html.TextAreaElement();
       _textAreaElement!.rows = widget.maxLines;
+      _textAreaElement!.readOnly = widget.readOnly;
       inputEl = _textAreaElement!;
     } else {
       _inputElement = html.InputElement();
@@ -98,6 +103,30 @@ class _NativeInputState extends State<NativeInput> {
     // debug
     if (widget.obscureText) {
       _inputElement!.style.border = '1px solid red'; // debug
+    }
+
+    if(widget.selectionColor != null){
+      /*
+        Needs the following code in engine
+          sheet.insertRule('''
+            $cssSelectorPrefix flt-glass-pane {
+              --selection-background: #000000; 
+            }
+          ''', sheet.cssRules.length);
+
+          sheet.insertRule('''
+            $cssSelectorPrefix .customInputSelection::selection {
+              background-color: var(--selection-background);
+            }
+          ''', sheet.cssRules.length);
+      */
+      // There is no easy way to modify pseudoclasses via js. We are accomplishing this 
+      // here via modifying a css var that is responsible for this ::selection style
+      html.document.querySelector('flt-glass-pane')!.style.setProperty('--selection-background', colorToCss(widget.selectionColor!));
+
+      // To ensure we're only modifying selection on this specific input, we attach a custom class
+      // instead of adding a blanket rule for all inputs. 
+      inputEl.classes.add('customInputSelection');
     }
 
     // listen for events
