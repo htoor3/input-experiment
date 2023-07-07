@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:input_experiment/native_input.dart';
 // ignore: implementation_imports
-import 'package:flutter/src/widgets/web_editable_text.dart';
+// import 'package:flutter/src/widgets/web_editable_text.dart';
 
 void main() {
   runApp(const MyApp());
@@ -59,25 +59,34 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   TextStyle _getInputStyleForState(TextStyle style) {
-    final TextStyle stateStyle = MaterialStateProperty.resolveAs(_m3StateInputStyle(context)!, _materialState);
-    final TextStyle providedStyle = MaterialStateProperty.resolveAs(style, _materialState);
+    final TextStyle stateStyle = MaterialStateProperty.resolveAs(
+        _m3StateInputStyle(context)!, _materialState);
+    final TextStyle providedStyle =
+        MaterialStateProperty.resolveAs(style, _materialState);
     return providedStyle.merge(stateStyle);
   }
 
-  TextStyle? _m3StateInputStyle(BuildContext context) => MaterialStateTextStyle.resolveWith((Set<MaterialState> states) {
-    if (states.contains(MaterialState.disabled)) {
-      return TextStyle(color: Theme.of(context).textTheme.bodyLarge!.color?.withOpacity(0.38));
-    }
-    return TextStyle(color: Theme.of(context).textTheme.bodyLarge!.color);
-  });
+  TextStyle? _m3StateInputStyle(BuildContext context) =>
+      MaterialStateTextStyle.resolveWith((Set<MaterialState> states) {
+        if (states.contains(MaterialState.disabled)) {
+          return TextStyle(
+              color: Theme.of(context)
+                  .textTheme
+                  .bodyLarge!
+                  .color
+                  ?.withOpacity(0.38));
+        }
+        return TextStyle(color: Theme.of(context).textTheme.bodyLarge!.color);
+      });
 
-    Set<MaterialState> get _materialState {
+  Set<MaterialState> get _materialState {
     return <MaterialState>{
       if (focusNode.hasFocus) MaterialState.focused,
     };
   }
 
-  TextStyle _m3InputStyle(BuildContext context) => Theme.of(context).textTheme.bodyLarge!;
+  TextStyle _m3InputStyle(BuildContext context) =>
+      Theme.of(context).textTheme.bodyLarge!;
 
   @override
   Widget build(BuildContext context) {
@@ -91,20 +100,32 @@ class _MyHomePageState extends State<MyHomePage> {
       body: Center(
         child: Column(
           children: <Widget>[
+            // NativeInput(
+            //   controller: myController,
+            //   focusNode: FocusNode(),
+            //   style: style,
+            //   cursorColor: cursorColor,
+            //   backgroundCursorColor: backgroundCursorColor,
+            //   onChanged: (value) {
+            //     print('onChanged value: ${value}');
+            //   },
+            //   maxLines: 5,
+            // ),
             NativeInput(
               controller: myController,
               focusNode: FocusNode(),
               style: style,
               cursorColor: cursorColor,
               backgroundCursorColor: backgroundCursorColor,
+              textCapitalization: TextCapitalization.characters,
             ),
             NativeInput(
-              controller: myController,
+              controller: TextEditingController(),
               focusNode: FocusNode(),
               style: style,
               cursorColor: cursorColor,
               backgroundCursorColor: backgroundCursorColor,
-              password: true,
+              obscureText: true,
             ),
             // TextField(
             //   controller: myController,
@@ -117,12 +138,17 @@ class _MyHomePageState extends State<MyHomePage> {
             //   cursorColor: cursorColor,
             //   backgroundCursorColor: backgroundCursorColor,
             // ),
-            // EditableText(
-            //     controller: myController,
-            //     focusNode: FocusNode(),
-            //     style: style,
-            //     cursorColor: cursorColor,
-            //     backgroundCursorColor: backgroundCursorColor),
+            EditableText(
+              controller: TextEditingController(),
+              focusNode: FocusNode(),
+              style: style,
+              cursorColor: cursorColor,
+              backgroundCursorColor: backgroundCursorColor,
+              onChanged: (value) {
+                print('onChanged value EditableText: ${value}');
+              },
+              textCapitalization: TextCapitalization.characters,
+            ),
             // WebEditableText(
             //     controller: myController,
             //     focusNode: FocusNode(),

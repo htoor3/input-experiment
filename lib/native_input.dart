@@ -10,6 +10,10 @@ import 'package:uuid/uuid.dart';
 
 import 'package:flutter/widgets.dart';
 
+/*
+  line-height. 
+*/
+
 /// The web implementation of the `NativeInput` widget.
 class NativeInput extends StatefulWidget {
   NativeInput({
@@ -25,7 +29,8 @@ class NativeInput extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.autofocus = false,
     this.onChanged,
-    this.maxLines = 1,
+    this.maxLines = 1, // issues with height calc + fonts
+    this.textCapitalization = TextCapitalization.none,
   }) {
     viewType = '__webNativeInputViewType__${const Uuid().v4()}';
   }
@@ -43,6 +48,7 @@ class NativeInput extends StatefulWidget {
   final bool autofocus;
   final ValueChanged<String>? onChanged;
   final int maxLines;
+  final TextCapitalization textCapitalization;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -52,6 +58,7 @@ class _NativeInputState extends State<NativeInput> {
   late html.HtmlElement inputEl;
   html.InputElement? _inputElement;
   html.TextAreaElement? _textAreaElement;
+  double sizedBoxHeight = 24;
 
   @override
   void initState() {
@@ -88,9 +95,8 @@ class _NativeInputState extends State<NativeInput> {
       ..padding = '0'
       ..textAlign = widget.textAlign.name;
 
-    
     // debug
-    if(widget.obscureText){
+    if (widget.obscureText) {
       _inputElement!.style.border = '1px solid red'; // debug
     }
 
@@ -121,11 +127,17 @@ class _NativeInputState extends State<NativeInput> {
     widget.controller.addListener(_controllerListener);
     widget.focusNode.addListener(_focusListener);
 
+    // handle autofocus, need to wait for platform view to be added to DOM
     if (widget.autofocus) {
       WidgetsBinding.instance!.addPostFrameCallback((_) {
         inputEl.focus();
       });
     }
+
+    // calculate box size based on specified lines
+    sizedBoxHeight *= widget.maxLines;
+
+    setAutocapitalizeAttribute();
   }
 
   void _controllerListener() {
@@ -226,6 +238,46 @@ class _NativeInputState extends State<NativeInput> {
     return cssProperties.join('; ');
   }
 
+  /// Sets `autocapitalize` attribute on input elements.
+  ///
+  /// This attribute is only available for mobile browsers.
+  ///
+  /// Note that in mobile browsers the onscreen keyboards provide sentence
+  /// level capitalization as default as apposed to no capitalization on desktop
+  /// browser.
+  ///
+  /// See: https://developers.google.com/web/updates/2015/04/autocapitalize
+  /// https://developer.mozilla.org/en-US/docs/Web/HTML/Global_attributes/autocapitalize
+  void setAutocapitalizeAttribute() {
+    String autocapitalize = '';
+    switch (widget.textCapitalization) {
+      case TextCapitalization.words:
+        // TODO(mdebbar): There is a bug for `words` level capitalization in IOS now.
+        // For now go back to default. Remove the check after bug is resolved.
+        // https://bugs.webkit.org/show_bug.cgi?id=148504
+        // TODO add browser engines
+        // if (browserEngine == BrowserEngine.webkit) {
+        //   autocapitalize = 'sentences';
+        // } else {
+        //   autocapitalize = 'words';
+        // }
+        autocapitalize = 'words';
+      case TextCapitalization.characters:
+        autocapitalize = 'characters';
+      case TextCapitalization.sentences:
+        autocapitalize = 'sentences';
+      case TextCapitalization.none:
+      default:
+        autocapitalize = 'off';
+        break;
+    }
+    if(widget.maxLines > 1){
+      _textAreaElement!.autocapitalize = autocapitalize;
+    } else {
+      _inputElement!.autocapitalize = autocapitalize;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Focus(
@@ -245,7 +297,7 @@ class _NativeInputState extends State<NativeInput> {
         return KeyEventResult.ignored;
       },
       child: SizedBox(
-          height: 24,
+          height: sizedBoxHeight,
           child: HtmlElementView(
             viewType: widget.viewType,
             // can pass in creationParams (map of things)
