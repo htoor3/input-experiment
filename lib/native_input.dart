@@ -33,6 +33,11 @@ class NativeInput extends StatefulWidget {
     this.textCapitalization = TextCapitalization.none,
     this.keyboardAppearance = Brightness.light, // not supported on web
     this.selectionColor,
+    this.cursorWidth = 2.0, // not supported on web
+    this.cursorHeight, // not supported on web
+    this.cursorRadius, // not supported on web
+    this.enableSuggestions = true, // not supported on web
+    this.autocorrect = true, // Safari only
   }) {
     viewType = '__webNativeInputViewType__${const Uuid().v4()}';
   }
@@ -53,6 +58,11 @@ class NativeInput extends StatefulWidget {
   final TextCapitalization textCapitalization;
   final Brightness keyboardAppearance;
   final Color? selectionColor;
+  final double cursorWidth;
+  final double? cursorHeight;
+  final Radius? cursorRadius;
+  final bool enableSuggestions;
+  final bool autocorrect;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -167,6 +177,8 @@ class _NativeInputState extends State<NativeInput> {
     sizedBoxHeight *= widget.maxLines;
 
     setAutocapitalizeAttribute();
+
+    inputEl.setAttribute('autocorrect', widget.autocorrect == true ? 'on' : 'off');
   }
 
   void _controllerListener() {
