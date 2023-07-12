@@ -29,7 +29,7 @@ class NativeInput extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.autofocus = false,
     this.onChanged,
-    this.maxLines = 1, // issues with height calc + fonts
+    this.maxLines = 1, // issues with height calc + fonts, todo keyboard type, inputaction
     this.textCapitalization = TextCapitalization.none,
     this.keyboardAppearance = Brightness.light, // not supported on web
     this.selectionColor,
@@ -38,7 +38,72 @@ class NativeInput extends StatefulWidget {
     this.cursorRadius, // not supported on web
     this.enableSuggestions = true, // not supported on web
     this.autocorrect = true, // Safari only
+    this.undoController, // web handles its own undo 
+    this.smartDashesType, // not supported on web (ios only?)
+    this.smartQuotesType, // not supported on web (ios only?)
+    this.magnifierConfiguration = TextMagnifierConfiguration.disabled, // not supported on web
+    this.spellCheckConfiguration, // not supported on web
+    this.enableIMEPersonalizedLearning = true, // not supported on web
+    this.scribbleEnabled = true, // possibly not supported on web?
+    @Deprecated(
+      'Use `contextMenuBuilder` instead. '
+      'This feature was deprecated after v3.3.0-0.5.pre.',
+    )
+    this.toolbarOptions,
+    this.autocorrectionTextRectColor,
+    this.enableInteractiveSelection = true,
   }) {
+    assert(obscuringCharacter.length == 1);
+    // // assert(minLines == null || minLines > 0);
+    // assert(
+    //   (maxLines == null) || (minLines == null) || (maxLines >= minLines),
+    //   "minLines can't be greater than maxLines",
+    // ),
+    // assert(
+    //   !expands || (maxLines == null && minLines == null),
+    //   'minLines and maxLines must be null when expands is true.',
+    // ),
+    // assert(!obscureText || maxLines == 1, 'Obscured fields cannot be multiline.'),
+    // enableInteractiveSelection = enableInteractiveSelection ?? (!readOnly || !obscureText);
+    // toolbarOptions = selectionControls is TextSelectionHandleControls && toolbarOptions == null ? ToolbarOptions.empty : toolbarOptions ??
+    //     (obscureText
+    //         ? (readOnly
+    //             // No point in even offering "Select All" in a read-only obscured
+    //             // field.
+    //             ? ToolbarOptions.empty
+    //             // Writable, but obscured.
+    //             : const ToolbarOptions(
+    //                 selectAll: true,
+    //                 paste: true,
+    //               ))
+    //         : (readOnly
+    //             // Read-only, not obscured.
+    //             ? const ToolbarOptions(
+    //                 selectAll: true,
+    //                 copy: true,
+    //               )
+    //             // Writable, not obscured.
+    //             : const ToolbarOptions(
+    //                 copy: true,
+    //                 cut: true,
+    //                 selectAll: true,
+    //                 paste: true,
+    //               )));
+    //    assert(
+    //       spellCheckConfiguration == null ||
+    //       spellCheckConfiguration == const SpellCheckConfiguration.disabled() ||
+    //       spellCheckConfiguration.misspelledTextStyle != null,
+    //       'spellCheckConfiguration must specify a misspelledTextStyle if spell check behavior is desired',
+    //    );
+    //    _strutStyle = strutStyle;
+    //    keyboardType = keyboardType ?? _inferKeyboardType(autofillHints: autofillHints, maxLines: maxLines);
+    //    inputFormatters = maxLines == 1
+    //        ? <TextInputFormatter>[
+    //            FilteringTextInputFormatter.singleLineFormatter,
+    //            ...inputFormatters ?? const Iterable<TextInputFormatter>.empty(),
+    //          ]
+    //        : inputFormatters;
+    //    showCursor = showCursor ?? !readOnly;
     viewType = '__webNativeInputViewType__${const Uuid().v4()}';
   }
 
@@ -63,6 +128,16 @@ class NativeInput extends StatefulWidget {
   final Radius? cursorRadius;
   final bool enableSuggestions;
   final bool autocorrect;
+  final UndoHistoryController? undoController;
+  final SmartDashesType? smartDashesType;
+  final SmartQuotesType? smartQuotesType;
+  final TextMagnifierConfiguration magnifierConfiguration;
+  final SpellCheckConfiguration? spellCheckConfiguration;
+  final bool enableIMEPersonalizedLearning;
+  final bool scribbleEnabled;
+  final ToolbarOptions? toolbarOptions;
+  final Color? autocorrectionTextRectColor;
+  final bool enableInteractiveSelection;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -150,12 +225,25 @@ class _NativeInputState extends State<NativeInput> {
     });
 
     inputEl.onFocus.listen((e) {
+      // need to reset the css var color in case it was changed from
+      // another instance
+      html.document.querySelector('flt-glass-pane')!.style.setProperty('--selection-background', colorToCss(widget.selectionColor!));
       widget.focusNode.requestFocus();
     });
 
     inputEl.onBlur.listen((e) {
       widget.focusNode.unfocus();
     });
+
+    // hacky implementation, but don't know of a non-JS solution to disable
+    // selection while keeping the input enabled for mouse + key events.
+    // We don't add the listener if readOnly is set because the readOnly attribute
+    // will take care of the disabled behavior  
+    if(widget.enableInteractiveSelection == false && !widget.readOnly) {
+      inputEl.onSelect.listen((event) {
+        _inputElement!.selectionStart = _inputElement!.selectionEnd;
+      });
+    }
 
     // register platform view
     // ignore: undefined_prefixed_name
