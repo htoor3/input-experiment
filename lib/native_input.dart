@@ -52,6 +52,12 @@ class NativeInput extends StatefulWidget {
     this.toolbarOptions,
     this.autocorrectionTextRectColor,
     this.enableInteractiveSelection = true,
+    this.selectionHeightStyle = ui.BoxHeightStyle.tight,// not supported on web
+    this.selectionWidthStyle = ui.BoxWidthStyle.tight, // not supported on web
+    this.paintCursorAboveText = false, // not supported on web
+    this.cursorOpacityAnimates = false,// not supported on web
+    this.cursorOffset, // not supported on web,
+    this.rendererIgnoresPointer = false,
   }) {
     assert(obscuringCharacter.length == 1);
     // // assert(minLines == null || minLines > 0);
@@ -138,6 +144,12 @@ class NativeInput extends StatefulWidget {
   final ToolbarOptions? toolbarOptions;
   final Color? autocorrectionTextRectColor;
   final bool enableInteractiveSelection;
+  final ui.BoxHeightStyle selectionHeightStyle;
+  final ui.BoxWidthStyle selectionWidthStyle;
+  final bool paintCursorAboveText;
+  final Offset? cursorOffset;
+  final bool cursorOpacityAnimates;
+  final bool rendererIgnoresPointer;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -183,7 +195,8 @@ class _NativeInputState extends State<NativeInput> {
       ..outline = 'none'
       ..border = 'none'
       ..padding = '0'
-      ..textAlign = widget.textAlign.name;
+      ..textAlign = widget.textAlign.name
+      ..pointerEvents = widget.rendererIgnoresPointer ? 'none' : 'auto';
 
     // debug
     if (widget.obscureText) {
