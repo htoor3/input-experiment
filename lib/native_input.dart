@@ -16,52 +16,53 @@ import 'package:flutter/widgets.dart';
 
 /// The web implementation of the `NativeInput` widget.
 class NativeInput extends StatefulWidget {
-  NativeInput({
-    super.key,
-    required this.controller,
-    required this.focusNode,
-    required this.style,
-    required this.cursorColor,
-    required this.backgroundCursorColor, // not supported on web
-    this.readOnly = false,
-    this.obscuringCharacter = '•', // how to support?
-    this.obscureText = false,
-    this.textAlign = TextAlign.start,
-    this.autofocus = false,
-    this.onChanged,
-    this.maxLines =
-        1, // issues with height calc + fonts, todo keyboard type, inputaction
-    this.textCapitalization = TextCapitalization.none,
-    this.keyboardAppearance = Brightness.light, // not supported on web
-    this.selectionColor,
-    this.cursorWidth = 2.0, // not supported on web
-    this.cursorHeight, // not supported on web
-    this.cursorRadius, // not supported on web
-    this.enableSuggestions = true, // not supported on web
-    this.autocorrect = true, // Safari only
-    this.undoController, // web handles its own undo
-    this.smartDashesType, // not supported on web (ios only?)
-    this.smartQuotesType, // not supported on web (ios only?)
-    this.magnifierConfiguration =
-        TextMagnifierConfiguration.disabled, // not supported on web
-    this.spellCheckConfiguration, // not supported on web
-    this.enableIMEPersonalizedLearning = true, // not supported on web
-    this.scribbleEnabled = true, // possibly not supported on web?
-    @Deprecated(
-      'Use `contextMenuBuilder` instead. '
-      'This feature was deprecated after v3.3.0-0.5.pre.',
-    )
-    this.toolbarOptions,
-    this.autocorrectionTextRectColor,
-    this.enableInteractiveSelection = true,
-    this.selectionHeightStyle = ui.BoxHeightStyle.tight, // not supported on web
-    this.selectionWidthStyle = ui.BoxWidthStyle.tight, // not supported on web
-    this.paintCursorAboveText = false, // not supported on web
-    this.cursorOpacityAnimates = false, // not supported on web
-    this.cursorOffset, // not supported on web,
-    this.rendererIgnoresPointer = false,
-    this.textDirection,
-  }) {
+  NativeInput(
+      {super.key,
+      required this.controller,
+      required this.focusNode,
+      required this.style,
+      required this.cursorColor,
+      required this.backgroundCursorColor, // not supported on web
+      this.readOnly = false,
+      this.obscuringCharacter = '•', // how to support?
+      this.obscureText = false,
+      this.textAlign = TextAlign.start,
+      this.autofocus = false,
+      this.onChanged,
+      this.maxLines =
+          1, // issues with height calc + fonts, todo keyboard type, inputaction
+      this.textCapitalization = TextCapitalization.none,
+      this.keyboardAppearance = Brightness.light, // not supported on web
+      this.selectionColor,
+      this.cursorWidth = 2.0, // not supported on web
+      this.cursorHeight, // not supported on web
+      this.cursorRadius, // not supported on web
+      this.enableSuggestions = true, // not supported on web
+      this.autocorrect = true, // Safari only
+      this.undoController, // web handles its own undo
+      this.smartDashesType, // not supported on web (ios only?)
+      this.smartQuotesType, // not supported on web (ios only?)
+      this.magnifierConfiguration =
+          TextMagnifierConfiguration.disabled, // not supported on web
+      this.spellCheckConfiguration, // not supported on web
+      this.enableIMEPersonalizedLearning = true, // not supported on web
+      this.scribbleEnabled = true, // possibly not supported on web?
+      @Deprecated(
+        'Use `contextMenuBuilder` instead. '
+        'This feature was deprecated after v3.3.0-0.5.pre.',
+      )
+      this.toolbarOptions,
+      this.autocorrectionTextRectColor,
+      this.enableInteractiveSelection = true,
+      this.selectionHeightStyle =
+          ui.BoxHeightStyle.tight, // not supported on web
+      this.selectionWidthStyle = ui.BoxWidthStyle.tight, // not supported on web
+      this.paintCursorAboveText = false, // not supported on web
+      this.cursorOpacityAnimates = false, // not supported on web
+      this.cursorOffset, // not supported on web,
+      this.rendererIgnoresPointer = false,
+      this.textDirection,
+      this.showCursor = true}) {
     assert(obscuringCharacter.length == 1);
     // // assert(minLines == null || minLines > 0);
     // assert(
@@ -154,6 +155,7 @@ class NativeInput extends StatefulWidget {
   final bool cursorOpacityAnimates;
   final bool rendererIgnoresPointer;
   final TextDirection? textDirection;
+  final bool? showCursor;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -165,7 +167,8 @@ class _NativeInputState extends State<NativeInput> {
   html.TextAreaElement? _textAreaElement;
   double sizedBoxHeight = 24;
   TextDirection get _textDirection =>
-      widget.textDirection ?? TextDirection.ltr; // Should this default to Directionality.of(context)?
+      widget.textDirection ??
+      TextDirection.ltr; // Should this default to Directionality.of(context)?
 
   @override
   void initState() {
@@ -197,7 +200,11 @@ class _NativeInputState extends State<NativeInput> {
     inputEl.style
       ..width = '100%'
       ..height = '100%'
-      ..setProperty('caret-color', colorToCss(widget.cursorColor))
+      ..setProperty(
+          'caret-color',
+          widget.showCursor == true
+              ? colorToCss(widget.cursorColor)
+              : 'transparent')
       ..outline = 'none'
       ..border = 'none'
       ..padding = '0'
@@ -431,8 +438,7 @@ class _NativeInputState extends State<NativeInput> {
     }
   }
 
-  
-  /// NOTE: Taken from engine. 
+  /// NOTE: Taken from engine.
   /// Converts [align] to its corresponding CSS value.
   ///
   /// This value is used as the "text-align" CSS property, e.g.:
