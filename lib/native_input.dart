@@ -29,7 +29,8 @@ class NativeInput extends StatefulWidget {
     this.textAlign = TextAlign.start,
     this.autofocus = false,
     this.onChanged,
-    this.maxLines = 1, // issues with height calc + fonts, todo keyboard type, inputaction
+    this.maxLines =
+        1, // issues with height calc + fonts, todo keyboard type, inputaction
     this.textCapitalization = TextCapitalization.none,
     this.keyboardAppearance = Brightness.light, // not supported on web
     this.selectionColor,
@@ -38,10 +39,11 @@ class NativeInput extends StatefulWidget {
     this.cursorRadius, // not supported on web
     this.enableSuggestions = true, // not supported on web
     this.autocorrect = true, // Safari only
-    this.undoController, // web handles its own undo 
+    this.undoController, // web handles its own undo
     this.smartDashesType, // not supported on web (ios only?)
     this.smartQuotesType, // not supported on web (ios only?)
-    this.magnifierConfiguration = TextMagnifierConfiguration.disabled, // not supported on web
+    this.magnifierConfiguration =
+        TextMagnifierConfiguration.disabled, // not supported on web
     this.spellCheckConfiguration, // not supported on web
     this.enableIMEPersonalizedLearning = true, // not supported on web
     this.scribbleEnabled = true, // possibly not supported on web?
@@ -52,12 +54,13 @@ class NativeInput extends StatefulWidget {
     this.toolbarOptions,
     this.autocorrectionTextRectColor,
     this.enableInteractiveSelection = true,
-    this.selectionHeightStyle = ui.BoxHeightStyle.tight,// not supported on web
+    this.selectionHeightStyle = ui.BoxHeightStyle.tight, // not supported on web
     this.selectionWidthStyle = ui.BoxWidthStyle.tight, // not supported on web
     this.paintCursorAboveText = false, // not supported on web
-    this.cursorOpacityAnimates = false,// not supported on web
+    this.cursorOpacityAnimates = false, // not supported on web
     this.cursorOffset, // not supported on web,
     this.rendererIgnoresPointer = false,
+    this.textDirection,
   }) {
     assert(obscuringCharacter.length == 1);
     // // assert(minLines == null || minLines > 0);
@@ -150,6 +153,7 @@ class NativeInput extends StatefulWidget {
   final Offset? cursorOffset;
   final bool cursorOpacityAnimates;
   final bool rendererIgnoresPointer;
+  final TextDirection? textDirection;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -160,6 +164,8 @@ class _NativeInputState extends State<NativeInput> {
   html.InputElement? _inputElement;
   html.TextAreaElement? _textAreaElement;
   double sizedBoxHeight = 24;
+  TextDirection get _textDirection =>
+      widget.textDirection ?? TextDirection.ltr; // Should this default to Directionality.of(context)?
 
   @override
   void initState() {
@@ -195,15 +201,16 @@ class _NativeInputState extends State<NativeInput> {
       ..outline = 'none'
       ..border = 'none'
       ..padding = '0'
-      ..textAlign = widget.textAlign.name
-      ..pointerEvents = widget.rendererIgnoresPointer ? 'none' : 'auto';
+      ..textAlign = textAlignToCssValue(widget.textAlign, _textDirection)
+      ..pointerEvents = widget.rendererIgnoresPointer ? 'none' : 'auto'
+      ..direction = _textDirection.name;
 
     // debug
     if (widget.obscureText) {
       _inputElement!.style.border = '1px solid red'; // debug
     }
 
-    if(widget.selectionColor != null){
+    if (widget.selectionColor != null) {
       /*
         Needs the following code in engine
           sheet.insertRule('''
@@ -218,12 +225,13 @@ class _NativeInputState extends State<NativeInput> {
             }
           ''', sheet.cssRules.length);
       */
-      // There is no easy way to modify pseudoclasses via js. We are accomplishing this 
+      // There is no easy way to modify pseudoclasses via js. We are accomplishing this
       // here via modifying a css var that is responsible for this ::selection style
-      html.document.querySelector('flt-glass-pane')!.style.setProperty('--selection-background', colorToCss(widget.selectionColor!));
+      html.document.querySelector('flt-glass-pane')!.style.setProperty(
+          '--selection-background', colorToCss(widget.selectionColor!));
 
       // To ensure we're only modifying selection on this specific input, we attach a custom class
-      // instead of adding a blanket rule for all inputs. 
+      // instead of adding a blanket rule for all inputs.
       inputEl.classes.add('customInputSelection');
     }
 
@@ -240,7 +248,8 @@ class _NativeInputState extends State<NativeInput> {
     inputEl.onFocus.listen((e) {
       // need to reset the css var color in case it was changed from
       // another instance
-      html.document.querySelector('flt-glass-pane')!.style.setProperty('--selection-background', colorToCss(widget.selectionColor!));
+      html.document.querySelector('flt-glass-pane')!.style.setProperty(
+          '--selection-background', colorToCss(widget.selectionColor!));
       widget.focusNode.requestFocus();
     });
 
@@ -251,8 +260,8 @@ class _NativeInputState extends State<NativeInput> {
     // hacky implementation, but don't know of a non-JS solution to disable
     // selection while keeping the input enabled for mouse + key events.
     // We don't add the listener if readOnly is set because the readOnly attribute
-    // will take care of the disabled behavior  
-    if(widget.enableInteractiveSelection == false && !widget.readOnly) {
+    // will take care of the disabled behavior
+    if (widget.enableInteractiveSelection == false && !widget.readOnly) {
       inputEl.onSelect.listen((event) {
         _inputElement!.selectionStart = _inputElement!.selectionEnd;
       });
@@ -279,7 +288,8 @@ class _NativeInputState extends State<NativeInput> {
 
     setAutocapitalizeAttribute();
 
-    inputEl.setAttribute('autocorrect', widget.autocorrect == true ? 'on' : 'off');
+    inputEl.setAttribute(
+        'autocorrect', widget.autocorrect == true ? 'on' : 'off');
   }
 
   void _controllerListener() {
@@ -380,6 +390,7 @@ class _NativeInputState extends State<NativeInput> {
     return cssProperties.join('; ');
   }
 
+  /// NOTE: Taken from engine
   /// Sets `autocapitalize` attribute on input elements.
   ///
   /// This attribute is only available for mobile browsers.
@@ -413,10 +424,50 @@ class _NativeInputState extends State<NativeInput> {
         autocapitalize = 'off';
         break;
     }
-    if(widget.maxLines > 1){
+    if (widget.maxLines > 1) {
       _textAreaElement!.autocapitalize = autocapitalize;
     } else {
       _inputElement!.autocapitalize = autocapitalize;
+    }
+  }
+
+  
+  /// NOTE: Taken from engine. 
+  /// Converts [align] to its corresponding CSS value.
+  ///
+  /// This value is used as the "text-align" CSS property, e.g.:
+  ///
+  /// ```css
+  /// text-align: right;
+  /// ```
+  String textAlignToCssValue(
+      ui.TextAlign? align, ui.TextDirection textDirection) {
+    switch (align) {
+      case ui.TextAlign.left:
+        return 'left';
+      case ui.TextAlign.right:
+        return 'right';
+      case ui.TextAlign.center:
+        return 'center';
+      case ui.TextAlign.justify:
+        return 'justify';
+      case ui.TextAlign.end:
+        switch (textDirection) {
+          case ui.TextDirection.ltr:
+            return 'end';
+          case ui.TextDirection.rtl:
+            return 'left';
+        }
+      case ui.TextAlign.start:
+        switch (textDirection) {
+          case ui.TextDirection.ltr:
+            return ''; // it's the default
+          case ui.TextDirection.rtl:
+            return 'right';
+        }
+      case null:
+        // If align is not specified return default.
+        return '';
     }
   }
 
