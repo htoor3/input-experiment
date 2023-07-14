@@ -13,7 +13,7 @@ import 'package:flutter/widgets.dart';
 import 'autofill_hint.dart';
 
 /*
-  line-height. 
+  Problems: getting the height to scale with the content.   
 */
 
 /// The web implementation of the `NativeInput` widget.
@@ -66,6 +66,11 @@ class NativeInput extends StatefulWidget {
     this.showCursor = true,
     this.autofillHints = const <String>[],
     this.autofillClient, // not supported on web (browser handles autofill)
+    this.strutStyle, // not supported on web (not 100% sure)
+    this.locale, // not supported on web (lang attribute?)
+    this.showSelectionHandles = false, // not supported on web
+    this.textScaleFactor,
+    this.forceLine = true, // not supported on web (not 100% sure)
   }) {
     assert(obscuringCharacter.length == 1);
     // // assert(minLines == null || minLines > 0);
@@ -162,6 +167,11 @@ class NativeInput extends StatefulWidget {
   final bool? showCursor;
   final Iterable<String> autofillHints;
   final AutofillClient? autofillClient;
+  final StrutStyle? strutStyle;
+  final Locale? locale;
+  final bool showSelectionHandles;
+  final double? textScaleFactor;
+  final bool forceLine;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -255,6 +265,11 @@ class _NativeInputState extends State<NativeInput> {
       // To ensure we're only modifying selection on this specific input, we attach a custom class
       // instead of adding a blanket rule for all inputs.
       inputEl.classes.add('customInputSelection');
+    }
+
+    if (widget.textScaleFactor != null) {
+      inputEl.style.fontSize =
+          scaleFontSize(inputEl.style.fontSize, widget.textScaleFactor!);
     }
 
     // listen for events
@@ -490,6 +505,17 @@ class _NativeInputState extends State<NativeInput> {
         // If align is not specified return default.
         return '';
     }
+  }
+
+  /// Takes a font size read from the style property (e.g. '16px) and scales it
+  /// by some factor. Returns the scaled font size in a CSS friendly format.
+  String scaleFontSize(String fontSize, double textScaleFactor) {
+    assert(fontSize.endsWith('px'));
+    final String strippedFontSize = fontSize.replaceAll('px', '');
+    final double parsedFontSize = double.parse(strippedFontSize);
+    final int scaledFontSize = (parsedFontSize * textScaleFactor).round();
+
+    return '${scaledFontSize}px';
   }
 
   @override
