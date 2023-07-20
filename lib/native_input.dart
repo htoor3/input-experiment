@@ -33,6 +33,7 @@ class NativeInput extends StatefulWidget {
     this.onChanged,
     this.maxLines =
         1, // issues with height calc + fonts, todo keyboard type, inputaction
+    this.minLines, // TODO
     this.textCapitalization = TextCapitalization.none,
     this.keyboardAppearance = Brightness.light, // not supported on web
     this.selectionColor,
@@ -71,12 +72,26 @@ class NativeInput extends StatefulWidget {
     this.showSelectionHandles = false, // not supported on web
     this.textScaleFactor,
     this.forceLine = true, // not supported on web (not 100% sure)
+    this.expands = false, // web behavior seems to always expand?
+    this.textHeightBehavior, // TODO: not sure how to implement
+    this.textWidthBasis = TextWidthBasis.parent, // not sure if this can be supported on web
     TextInputType? keyboardType,
+    this.clipBehavior = Clip.hardEdge, // TODO: should I use overflow here?
+    this.restorationId,
   })  : assert(obscuringCharacter.length == 1),
         smartDashesType = smartDashesType ??
             (obscureText ? SmartDashesType.disabled : SmartDashesType.enabled),
         smartQuotesType = smartQuotesType ??
             (obscureText ? SmartQuotesType.disabled : SmartQuotesType.enabled),
+                    assert(minLines == null || minLines > 0),
+       assert(
+         (maxLines == null) || (minLines == null) || (maxLines >= minLines),
+         "minLines can't be greater than maxLines",
+       ),
+        assert(
+         !expands || (maxLines == null && minLines == null),
+         'minLines and maxLines must be null when expands is true.',
+       ),
         _strutStyle = strutStyle,
         keyboardType = keyboardType ??
             _inferKeyboardType(
@@ -99,7 +114,8 @@ class NativeInput extends StatefulWidget {
   final TextAlign textAlign;
   final bool autofocus;
   final ValueChanged<String>? onChanged;
-  final int maxLines;
+  final int? maxLines;
+  final int? minLines;
   final TextCapitalization textCapitalization;
   final Brightness keyboardAppearance;
   final Color? selectionColor;
@@ -133,6 +149,11 @@ class NativeInput extends StatefulWidget {
   final double? textScaleFactor;
   final bool forceLine;
   final TextInputType keyboardType;
+  final bool expands;
+  final TextHeightBehavior? textHeightBehavior;
+  final TextWidthBasis textWidthBasis;
+  final Clip clipBehavior;
+  final String? restorationId;
 
   // Infer the keyboard type of an `EditableText` if it's not specified.
   static TextInputType _inferKeyboardType({
@@ -244,17 +265,20 @@ class _NativeInputState extends State<NativeInput> {
   TextDirection get _textDirection =>
       widget.textDirection ??
       TextDirection.ltr; // Should this default to Directionality.of(context)?
+  late final int _maxLines;
 
   @override
   void initState() {
     super.initState();
 
+    _maxLines = widget.maxLines ?? 1;
+    
     // create input element + init styling
-
+    
     // conditionally create <textarea> or <input>
-    if (widget.maxLines > 1) {
+    if (_maxLines > 1) {
       _textAreaElement = html.TextAreaElement();
-      _textAreaElement!.rows = widget.maxLines;
+      _textAreaElement!.rows = _maxLines;
       _textAreaElement!.readOnly = widget.readOnly;
       inputEl = _textAreaElement!;
     } else {
@@ -301,7 +325,8 @@ class _NativeInputState extends State<NativeInput> {
       ..padding = '0'
       ..textAlign = textAlignToCssValue(widget.textAlign, _textDirection)
       ..pointerEvents = widget.rendererIgnoresPointer ? 'none' : 'auto'
-      ..direction = _textDirection.name;
+      ..direction = _textDirection.name
+      ..lineHeight = '1.5'; // can this be modified by a property?
 
     // debug
     if (widget.obscureText) {
@@ -388,7 +413,8 @@ class _NativeInputState extends State<NativeInput> {
     }
 
     // calculate box size based on specified lines
-    sizedBoxHeight *= widget.maxLines;
+    // TODO: can we make this better?
+    sizedBoxHeight *= _maxLines;
 
     setAutocapitalizeAttribute();
 
@@ -419,13 +445,13 @@ class _NativeInputState extends State<NativeInput> {
   }
 
   String getElementValue() {
-    return (widget.maxLines > 1
+    return (_maxLines > 1
         ? _textAreaElement!.value
         : _inputElement!.value) as String;
   }
 
   void setElementValue(String value) {
-    if (widget.maxLines > 1) {
+    if (_maxLines > 1) {
       _textAreaElement!.value = value;
     } else {
       _inputElement!.value = value;
@@ -457,7 +483,7 @@ class _NativeInputState extends State<NativeInput> {
     }
 
     if (style.fontFamily != null) {
-      cssProperties.add('font-family: ${style.fontFamily}');
+      cssProperties.add('font-family: "${style.fontFamily}"');
     }
 
     if (style.letterSpacing != null) {
@@ -528,7 +554,7 @@ class _NativeInputState extends State<NativeInput> {
         autocapitalize = 'off';
         break;
     }
-    if (widget.maxLines > 1) {
+    if (_maxLines > 1) {
       _textAreaElement!.autocapitalize = autocapitalize;
     } else {
       _inputElement!.autocapitalize = autocapitalize;
