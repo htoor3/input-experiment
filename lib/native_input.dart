@@ -42,8 +42,8 @@ class NativeInput extends StatefulWidget {
     this.enableSuggestions = true, // not supported on web
     this.autocorrect = true, // Safari only
     this.undoController, // web handles its own undo
-    this.smartDashesType, // not supported on web (ios only?)
-    this.smartQuotesType, // not supported on web (ios only?)
+    SmartDashesType? smartDashesType, // not supported on web (ios only?)
+    SmartQuotesType? smartQuotesType, // not supported on web (ios only?)
     this.magnifierConfiguration =
         TextMagnifierConfiguration.disabled, // not supported on web
     this.spellCheckConfiguration, // not supported on web
@@ -53,9 +53,9 @@ class NativeInput extends StatefulWidget {
       'Use `contextMenuBuilder` instead. '
       'This feature was deprecated after v3.3.0-0.5.pre.',
     )
-    this.toolbarOptions,
+    ToolbarOptions? toolbarOptions,
     this.autocorrectionTextRectColor,
-    this.enableInteractiveSelection = true,
+    bool? enableInteractiveSelection,
     this.selectionHeightStyle = ui.BoxHeightStyle.tight, // not supported on web
     this.selectionWidthStyle = ui.BoxWidthStyle.tight, // not supported on web
     this.paintCursorAboveText = false, // not supported on web
@@ -63,68 +63,29 @@ class NativeInput extends StatefulWidget {
     this.cursorOffset, // not supported on web,
     this.rendererIgnoresPointer = false,
     this.textDirection,
-    this.showCursor = true,
+    bool? showCursor,
     this.autofillHints = const <String>[],
     this.autofillClient, // not supported on web (browser handles autofill)
-    this.strutStyle, // not supported on web (not 100% sure)
+    StrutStyle? strutStyle, // not supported on web (not 100% sure)
     this.locale, // not supported on web (lang attribute?)
     this.showSelectionHandles = false, // not supported on web
     this.textScaleFactor,
     this.forceLine = true, // not supported on web (not 100% sure)
-  }) {
-    assert(obscuringCharacter.length == 1);
-    // // assert(minLines == null || minLines > 0);
-    // assert(
-    //   (maxLines == null) || (minLines == null) || (maxLines >= minLines),
-    //   "minLines can't be greater than maxLines",
-    // ),
-    // assert(
-    //   !expands || (maxLines == null && minLines == null),
-    //   'minLines and maxLines must be null when expands is true.',
-    // ),
-    // assert(!obscureText || maxLines == 1, 'Obscured fields cannot be multiline.'),
-    // enableInteractiveSelection = enableInteractiveSelection ?? (!readOnly || !obscureText);
-    // toolbarOptions = selectionControls is TextSelectionHandleControls && toolbarOptions == null ? ToolbarOptions.empty : toolbarOptions ??
-    //     (obscureText
-    //         ? (readOnly
-    //             // No point in even offering "Select All" in a read-only obscured
-    //             // field.
-    //             ? ToolbarOptions.empty
-    //             // Writable, but obscured.
-    //             : const ToolbarOptions(
-    //                 selectAll: true,
-    //                 paste: true,
-    //               ))
-    //         : (readOnly
-    //             // Read-only, not obscured.
-    //             ? const ToolbarOptions(
-    //                 selectAll: true,
-    //                 copy: true,
-    //               )
-    //             // Writable, not obscured.
-    //             : const ToolbarOptions(
-    //                 copy: true,
-    //                 cut: true,
-    //                 selectAll: true,
-    //                 paste: true,
-    //               )));
-    //    assert(
-    //       spellCheckConfiguration == null ||
-    //       spellCheckConfiguration == const SpellCheckConfiguration.disabled() ||
-    //       spellCheckConfiguration.misspelledTextStyle != null,
-    //       'spellCheckConfiguration must specify a misspelledTextStyle if spell check behavior is desired',
-    //    );
-    //    _strutStyle = strutStyle;
-    //    keyboardType = keyboardType ?? _inferKeyboardType(autofillHints: autofillHints, maxLines: maxLines);
-    //    inputFormatters = maxLines == 1
-    //        ? <TextInputFormatter>[
-    //            FilteringTextInputFormatter.singleLineFormatter,
-    //            ...inputFormatters ?? const Iterable<TextInputFormatter>.empty(),
-    //          ]
-    //        : inputFormatters;
-    //    showCursor = showCursor ?? !readOnly;
-    viewType = '__webNativeInputViewType__${const Uuid().v4()}';
-  }
+    TextInputType? keyboardType,
+  })  : assert(obscuringCharacter.length == 1),
+        smartDashesType = smartDashesType ??
+            (obscureText ? SmartDashesType.disabled : SmartDashesType.enabled),
+        smartQuotesType = smartQuotesType ??
+            (obscureText ? SmartQuotesType.disabled : SmartQuotesType.enabled),
+        _strutStyle = strutStyle,
+        keyboardType = keyboardType ??
+            _inferKeyboardType(
+                autofillHints: autofillHints, maxLines: maxLines),
+        showCursor = showCursor ?? !readOnly,
+        enableInteractiveSelection =
+            enableInteractiveSelection ?? (!readOnly || !obscureText),
+        toolbarOptions = null, // deprecated?
+        viewType = '__webNativeInputViewType__${const Uuid().v4()}';
 
   final TextEditingController controller;
   final FocusNode focusNode;
@@ -148,8 +109,8 @@ class NativeInput extends StatefulWidget {
   final bool enableSuggestions;
   final bool autocorrect;
   final UndoHistoryController? undoController;
-  final SmartDashesType? smartDashesType;
-  final SmartQuotesType? smartQuotesType;
+  final SmartDashesType smartDashesType;
+  final SmartQuotesType smartQuotesType;
   final TextMagnifierConfiguration magnifierConfiguration;
   final SpellCheckConfiguration? spellCheckConfiguration;
   final bool enableIMEPersonalizedLearning;
@@ -164,14 +125,112 @@ class NativeInput extends StatefulWidget {
   final bool cursorOpacityAnimates;
   final bool rendererIgnoresPointer;
   final TextDirection? textDirection;
-  final bool? showCursor;
+  final bool showCursor;
   final Iterable<String> autofillHints;
   final AutofillClient? autofillClient;
-  final StrutStyle? strutStyle;
   final Locale? locale;
   final bool showSelectionHandles;
   final double? textScaleFactor;
   final bool forceLine;
+  final TextInputType keyboardType;
+
+  // Infer the keyboard type of an `EditableText` if it's not specified.
+  static TextInputType _inferKeyboardType({
+    required Iterable<String>? autofillHints,
+    required int? maxLines,
+  }) {
+    if (autofillHints == null || autofillHints.isEmpty) {
+      return maxLines == 1 ? TextInputType.text : TextInputType.multiline;
+    }
+
+    final String effectiveHint = autofillHints.first;
+
+    if (maxLines != 1) {
+      return TextInputType.multiline;
+    }
+
+    const Map<String, TextInputType> inferKeyboardType =
+        <String, TextInputType>{
+      AutofillHints.addressCity: TextInputType.streetAddress,
+      AutofillHints.addressCityAndState: TextInputType.streetAddress,
+      AutofillHints.addressState: TextInputType.streetAddress,
+      AutofillHints.birthday: TextInputType.datetime,
+      AutofillHints.birthdayDay: TextInputType.datetime,
+      AutofillHints.birthdayMonth: TextInputType.datetime,
+      AutofillHints.birthdayYear: TextInputType.datetime,
+      AutofillHints.countryCode: TextInputType.number,
+      AutofillHints.countryName: TextInputType.text,
+      AutofillHints.creditCardExpirationDate: TextInputType.datetime,
+      AutofillHints.creditCardExpirationDay: TextInputType.datetime,
+      AutofillHints.creditCardExpirationMonth: TextInputType.datetime,
+      AutofillHints.creditCardExpirationYear: TextInputType.datetime,
+      AutofillHints.creditCardFamilyName: TextInputType.name,
+      AutofillHints.creditCardGivenName: TextInputType.name,
+      AutofillHints.creditCardMiddleName: TextInputType.name,
+      AutofillHints.creditCardName: TextInputType.name,
+      AutofillHints.creditCardNumber: TextInputType.number,
+      AutofillHints.creditCardSecurityCode: TextInputType.number,
+      AutofillHints.creditCardType: TextInputType.text,
+      AutofillHints.email: TextInputType.emailAddress,
+      AutofillHints.familyName: TextInputType.name,
+      AutofillHints.fullStreetAddress: TextInputType.streetAddress,
+      AutofillHints.gender: TextInputType.text,
+      AutofillHints.givenName: TextInputType.name,
+      AutofillHints.impp: TextInputType.url,
+      AutofillHints.jobTitle: TextInputType.text,
+      AutofillHints.language: TextInputType.text,
+      AutofillHints.location: TextInputType.streetAddress,
+      AutofillHints.middleInitial: TextInputType.name,
+      AutofillHints.middleName: TextInputType.name,
+      AutofillHints.name: TextInputType.name,
+      AutofillHints.namePrefix: TextInputType.name,
+      AutofillHints.nameSuffix: TextInputType.name,
+      AutofillHints.newPassword: TextInputType.text,
+      AutofillHints.newUsername: TextInputType.text,
+      AutofillHints.nickname: TextInputType.text,
+      AutofillHints.oneTimeCode: TextInputType.text,
+      AutofillHints.organizationName: TextInputType.text,
+      AutofillHints.password: TextInputType.text,
+      AutofillHints.photo: TextInputType.text,
+      AutofillHints.postalAddress: TextInputType.streetAddress,
+      AutofillHints.postalAddressExtended: TextInputType.streetAddress,
+      AutofillHints.postalAddressExtendedPostalCode: TextInputType.number,
+      AutofillHints.postalCode: TextInputType.number,
+      AutofillHints.streetAddressLevel1: TextInputType.streetAddress,
+      AutofillHints.streetAddressLevel2: TextInputType.streetAddress,
+      AutofillHints.streetAddressLevel3: TextInputType.streetAddress,
+      AutofillHints.streetAddressLevel4: TextInputType.streetAddress,
+      AutofillHints.streetAddressLine1: TextInputType.streetAddress,
+      AutofillHints.streetAddressLine2: TextInputType.streetAddress,
+      AutofillHints.streetAddressLine3: TextInputType.streetAddress,
+      AutofillHints.sublocality: TextInputType.streetAddress,
+      AutofillHints.telephoneNumber: TextInputType.phone,
+      AutofillHints.telephoneNumberAreaCode: TextInputType.phone,
+      AutofillHints.telephoneNumberCountryCode: TextInputType.phone,
+      AutofillHints.telephoneNumberDevice: TextInputType.phone,
+      AutofillHints.telephoneNumberExtension: TextInputType.phone,
+      AutofillHints.telephoneNumberLocal: TextInputType.phone,
+      AutofillHints.telephoneNumberLocalPrefix: TextInputType.phone,
+      AutofillHints.telephoneNumberLocalSuffix: TextInputType.phone,
+      AutofillHints.telephoneNumberNational: TextInputType.phone,
+      AutofillHints.transactionAmount:
+          TextInputType.numberWithOptions(decimal: true),
+      AutofillHints.transactionCurrency: TextInputType.text,
+      AutofillHints.url: TextInputType.url,
+      AutofillHints.username: TextInputType.text,
+    };
+
+    return inferKeyboardType[effectiveHint] ?? TextInputType.text;
+  }
+
+  StrutStyle get strutStyle {
+    if (_strutStyle == null) {
+      return StrutStyle.fromTextStyle(style, forceStrutHeight: true);
+    }
+    return _strutStyle!.inheritFromTextStyle(style);
+  }
+
+  final StrutStyle? _strutStyle;
 
   @override
   State<NativeInput> createState() => _NativeInputState();
@@ -204,6 +263,13 @@ class _NativeInputState extends State<NativeInput> {
 
       if (widget.obscureText) {
         _inputElement!.type = 'password';
+      } else {
+        final String textInputTypeName = widget.keyboardType.toJson()['name'];
+        final bool isDecimal = widget.keyboardType.decimal ?? false;
+        final Map<String, String> attributes =
+            getKeyboardTypeAttributes(textInputTypeName, isDecimal: isDecimal);
+        _inputElement!.type = attributes['type'];
+        _inputElement!.inputMode = attributes['inputmode'];
       }
 
       if (widget.autofillHints.isNotEmpty) {
@@ -270,6 +336,7 @@ class _NativeInputState extends State<NativeInput> {
     if (widget.textScaleFactor != null) {
       inputEl.style.fontSize =
           scaleFontSize(inputEl.style.fontSize, widget.textScaleFactor!);
+      sizedBoxHeight *= widget.textScaleFactor!;
     }
 
     // listen for events
@@ -516,6 +583,28 @@ class _NativeInputState extends State<NativeInput> {
     final int scaledFontSize = (parsedFontSize * textScaleFactor).round();
 
     return '${scaledFontSize}px';
+  }
+
+  Map<String, String> getKeyboardTypeAttributes(String inputType,
+      {bool isDecimal = false}) {
+    Map<String, Map<String, String>> attributes = {
+      'TextInputType.number': {
+        'type': 'number',
+        'inputmode': isDecimal ? 'decimal' : 'numeric'
+      },
+      'TextInputType.phone': {'type': 'tel', 'inputmode': 'tel'},
+      'TextInputType.emailAddress': {'type': 'email', 'inputmode': 'email'},
+      'TextInputType.url': {'type': 'url', 'inputmode': 'url'},
+      'TextInputType.none': {'type': 'text', 'inputmode': 'none'},
+      'TextInputType.text': {'type': 'text', 'inputmode': 'text'},
+    };
+
+    if (!attributes.containsKey(inputType)) {
+      // default to text type and inputmode
+      return {'type': 'text', 'inputmode': 'text'};
+    }
+
+    return attributes[inputType] as Map<String, String>;
   }
 
   @override
