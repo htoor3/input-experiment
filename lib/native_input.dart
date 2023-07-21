@@ -33,7 +33,7 @@ class NativeInput extends StatefulWidget {
     this.onChanged,
     this.maxLines =
         1, // issues with height calc + fonts, todo keyboard type, inputaction
-    this.minLines, // TODO
+    this.minLines, // TODO: interaction between this and maxlines, can we do it with a textarea?
     this.textCapitalization = TextCapitalization.none,
     this.keyboardAppearance = Brightness.light, // not supported on web
     this.selectionColor,
@@ -50,6 +50,7 @@ class NativeInput extends StatefulWidget {
     this.spellCheckConfiguration, // not supported on web
     this.enableIMEPersonalizedLearning = true, // not supported on web
     this.scribbleEnabled = true, // possibly not supported on web?
+    this.textInputAction,
     @Deprecated(
       'Use `contextMenuBuilder` instead. '
       'This feature was deprecated after v3.3.0-0.5.pre.',
@@ -74,24 +75,26 @@ class NativeInput extends StatefulWidget {
     this.forceLine = true, // not supported on web (not 100% sure)
     this.expands = false, // web behavior seems to always expand?
     this.textHeightBehavior, // TODO: not sure how to implement
-    this.textWidthBasis = TextWidthBasis.parent, // not sure if this can be supported on web
+    this.textWidthBasis =
+        TextWidthBasis.parent, // not sure if this can be supported on web
     TextInputType? keyboardType,
     this.clipBehavior = Clip.hardEdge, // TODO: should I use overflow here?
     this.restorationId,
+    this.selectionControls, // not sure if this makes sense on web
   })  : assert(obscuringCharacter.length == 1),
         smartDashesType = smartDashesType ??
             (obscureText ? SmartDashesType.disabled : SmartDashesType.enabled),
         smartQuotesType = smartQuotesType ??
             (obscureText ? SmartQuotesType.disabled : SmartQuotesType.enabled),
-                    assert(minLines == null || minLines > 0),
-       assert(
-         (maxLines == null) || (minLines == null) || (maxLines >= minLines),
-         "minLines can't be greater than maxLines",
-       ),
+        assert(minLines == null || minLines > 0),
         assert(
-         !expands || (maxLines == null && minLines == null),
-         'minLines and maxLines must be null when expands is true.',
-       ),
+          (maxLines == null) || (minLines == null) || (maxLines >= minLines),
+          "minLines can't be greater than maxLines",
+        ),
+        assert(
+          !expands || (maxLines == null && minLines == null),
+          'minLines and maxLines must be null when expands is true.',
+        ),
         _strutStyle = strutStyle,
         keyboardType = keyboardType ??
             _inferKeyboardType(
@@ -154,6 +157,8 @@ class NativeInput extends StatefulWidget {
   final TextWidthBasis textWidthBasis;
   final Clip clipBehavior;
   final String? restorationId;
+  final TextSelectionControls? selectionControls;
+  final TextInputAction? textInputAction;
 
   // Infer the keyboard type of an `EditableText` if it's not specified.
   static TextInputType _inferKeyboardType({
@@ -272,9 +277,9 @@ class _NativeInputState extends State<NativeInput> {
     super.initState();
 
     _maxLines = widget.maxLines ?? 1;
-    
+
     // create input element + init styling
-    
+
     // conditionally create <textarea> or <input>
     if (_maxLines > 1) {
       _textAreaElement = html.TextAreaElement();
@@ -288,10 +293,8 @@ class _NativeInputState extends State<NativeInput> {
       if (widget.obscureText) {
         _inputElement!.type = 'password';
       } else {
-        final String textInputTypeName = widget.keyboardType.toJson()['name'];
-        final bool isDecimal = widget.keyboardType.decimal ?? false;
         final Map<String, String> attributes =
-            getKeyboardTypeAttributes(textInputTypeName, isDecimal: isDecimal);
+            getKeyboardTypeAttributes(widget.keyboardType);
         _inputElement!.type = attributes['type'];
         _inputElement!.inputMode = attributes['inputmode'];
       }
@@ -420,6 +423,14 @@ class _NativeInputState extends State<NativeInput> {
 
     inputEl.setAttribute(
         'autocorrect', widget.autocorrect == true ? 'on' : 'off');
+
+    if (widget.textInputAction != null) {
+      final String? enterKeyHint = getEnterKeyHint(widget.textInputAction!);
+
+      if (enterKeyHint != null) {
+        inputEl.setAttribute('enterkeyhint', enterKeyHint);
+      }
+    }
   }
 
   void _controllerListener() {
@@ -445,9 +456,8 @@ class _NativeInputState extends State<NativeInput> {
   }
 
   String getElementValue() {
-    return (_maxLines > 1
-        ? _textAreaElement!.value
-        : _inputElement!.value) as String;
+    return (_maxLines > 1 ? _textAreaElement!.value : _inputElement!.value)
+        as String;
   }
 
   void setElementValue(String value) {
@@ -521,6 +531,7 @@ class _NativeInputState extends State<NativeInput> {
   }
 
   /// NOTE: Taken from engine
+  /// TODO: make more functional, set autocap attr outside of function using return val
   /// Sets `autocapitalize` attribute on input elements.
   ///
   /// This attribute is only available for mobile browsers.
@@ -611,26 +622,55 @@ class _NativeInputState extends State<NativeInput> {
     return '${scaledFontSize}px';
   }
 
-  Map<String, String> getKeyboardTypeAttributes(String inputType,
-      {bool isDecimal = false}) {
-    Map<String, Map<String, String>> attributes = {
-      'TextInputType.number': {
-        'type': 'number',
-        'inputmode': isDecimal ? 'decimal' : 'numeric'
-      },
-      'TextInputType.phone': {'type': 'tel', 'inputmode': 'tel'},
-      'TextInputType.emailAddress': {'type': 'email', 'inputmode': 'email'},
-      'TextInputType.url': {'type': 'url', 'inputmode': 'url'},
-      'TextInputType.none': {'type': 'text', 'inputmode': 'none'},
-      'TextInputType.text': {'type': 'text', 'inputmode': 'text'},
-    };
+  Map<String, String> getKeyboardTypeAttributes(TextInputType inputType) {
+    final bool? isDecimal = inputType.decimal;
 
-    if (!attributes.containsKey(inputType)) {
-      // default to text type and inputmode
-      return {'type': 'text', 'inputmode': 'text'};
+    switch (inputType) {
+      case TextInputType.number:
+        return {
+          'type': 'number',
+          'inputmode': isDecimal == true ? 'decimal' : 'numeric'
+        };
+      case TextInputType.phone:
+        return {'type': 'tel', 'inputmode': 'tel'};
+      case TextInputType.emailAddress:
+        return {'type': 'email', 'inputmode': 'email'};
+      case TextInputType.url:
+        return {'type': 'url', 'inputmode': 'url'};
+      case TextInputType.none:
+        return {'type': 'text', 'inputmode': 'none'};
+      case TextInputType.text:
+        return {'type': 'text', 'inputmode': 'text'};
+      default:
+        return {'type': 'text', 'inputmode': 'text'};
     }
+  }
 
-    return attributes[inputType] as Map<String, String>;
+  String? getEnterKeyHint(TextInputAction inputAction) {
+    switch (inputAction) {
+      case TextInputAction.continueAction:
+      case TextInputAction.next:
+        return 'next';
+      case TextInputAction.previous:
+        return 'previous';
+      case TextInputAction.done:
+        return 'done';
+      case TextInputAction.go:
+        return 'go';
+      case TextInputAction.newline:
+        return 'enter';
+      case TextInputAction.search:
+        return 'search';
+      case TextInputAction.send:
+        return 'send';
+      case TextInputAction.emergencyCall:
+      case TextInputAction.join:
+      case TextInputAction.none:
+      case TextInputAction.route:
+      case TextInputAction.unspecified:
+      default:
+        return null;
+    }
   }
 
   @override
