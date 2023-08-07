@@ -7,10 +7,7 @@ import 'dart:html' as html;
 import 'dart:ui' as ui; // change to ui_web when you update
 import 'package:flutter/services.dart';
 import 'package:uuid/uuid.dart';
-
 import 'package:flutter/widgets.dart';
-
-import 'autofill_hint.dart';
 
 /*
   Problems: getting the height to scale with the content.   
