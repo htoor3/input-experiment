@@ -50,7 +50,7 @@ class NativeInput extends StatefulWidget {
     this.spellCheckConfiguration, // not supported on web
     this.enableIMEPersonalizedLearning = true, // not supported on web
     this.scribbleEnabled = true, // possibly not supported on web?
-    this.textInputAction,
+    this.textInputAction, // keyboard label is correct, TODO: need to implement behavior
     @Deprecated(
       'Use `contextMenuBuilder` instead. '
       'This feature was deprecated after v3.3.0-0.5.pre.',
@@ -81,6 +81,12 @@ class NativeInput extends StatefulWidget {
     this.clipBehavior = Clip.hardEdge, // TODO: should I use overflow here?
     this.restorationId,
     this.selectionControls, // not sure if this makes sense on web
+    this.onEditingComplete, // TODO implement
+    this.onSubmitted,
+    this.onAppPrivateCommand,
+    this.onSelectionChanged,
+    this.onSelectionHandleTapped,
+    this.onTapOutside,
   })  : assert(obscuringCharacter.length == 1),
         smartDashesType = smartDashesType ??
             (obscureText ? SmartDashesType.disabled : SmartDashesType.enabled),
@@ -159,6 +165,12 @@ class NativeInput extends StatefulWidget {
   final String? restorationId;
   final TextSelectionControls? selectionControls;
   final TextInputAction? textInputAction;
+  final VoidCallback? onEditingComplete;
+  final ValueChanged<String>? onSubmitted;
+  final AppPrivateCommandCallback? onAppPrivateCommand;
+  final SelectionChangedCallback? onSelectionChanged;
+  final VoidCallback? onSelectionHandleTapped;
+  final TapRegionCallback? onTapOutside;
 
   // Infer the keyboard type of an `EditableText` if it's not specified.
   static TextInputType _inferKeyboardType({
@@ -301,8 +313,7 @@ class _NativeInputState extends State<NativeInput> {
 
       if (widget.autofillHints.isNotEmpty) {
         // browsers can only use one autocomplete attribute
-        final String autocomplete = BrowserAutofillHints.instance
-            .flutterToEngine(widget.autofillHints.first);
+        final String autocomplete = _getAutocompleteAttribute(widget.autofillHints.first);
         _inputElement!.id = autocomplete;
         _inputElement!.name = autocomplete;
         _inputElement!.autocomplete = autocomplete;
@@ -373,31 +384,61 @@ class _NativeInputState extends State<NativeInput> {
       widget.controller.text = currentText;
 
       if (widget.onChanged != null) {
-        widget.onChanged?.call(currentText);
+        widget.onChanged!.call(currentText);
       }
     });
 
     inputEl.onFocus.listen((e) {
-      // need to reset the css var color in case it was changed from
-      // another instance
-      html.document.querySelector('flt-glass-pane')!.style.setProperty(
-          '--selection-background', colorToCss(widget.selectionColor!));
       widget.focusNode.requestFocus();
+
+      if (widget.selectionColor != null) {
+        // Since we're relying on a CSS variable to handle selection background, we
+        // run into an issue when there are multiple inputs with multiple selection background
+        // values. In that case, the variable is always set to whatever the last rendered input's selection
+        // background value was set to.  To fix this, we update that CSS variable to the currently focused
+        // element's selection color value.
+        html.document.querySelector('flt-glass-pane')!.style.setProperty(
+            '--selection-background', colorToCss(widget.selectionColor!));
+      }
     });
 
     inputEl.onBlur.listen((e) {
       widget.focusNode.unfocus();
     });
 
-    // hacky implementation, but don't know of a non-JS solution to disable
-    // selection while keeping the input enabled for mouse + key events.
-    // We don't add the listener if readOnly is set because the readOnly attribute
-    // will take care of the disabled behavior
-    if (widget.enableInteractiveSelection == false && !widget.readOnly) {
-      inputEl.onSelect.listen((event) {
+    inputEl.onKeyDown.listen((event) {
+      if (event.keyCode == html.KeyCode.ENTER) {
+        final TextInputAction defaultTextInputAction =
+            _maxLines > 1 ? TextInputAction.newline : TextInputAction.done;
+        performAction(widget.textInputAction ?? defaultTextInputAction);
+      }
+    });
+
+    // we can only do 'select' events which fire after selection, but not
+    // when carets change positions.  This is slightly different than the 
+    // selectionChange behavior on Flutter, which also fires when the caret
+    // changes.  
+    inputEl.onSelect.listen((event) {
+      final int baseOffset = (_maxLines > 1
+              ? _textAreaElement!.selectionStart
+              : _inputElement!.selectionStart) ??
+          0;
+      final int extentOffset = (_maxLines > 1
+              ? _textAreaElement!.selectionEnd
+              : _inputElement!.selectionEnd) ??
+          0;
+      _handleSelectionChanged(
+          TextSelection(baseOffset: baseOffset, extentOffset: extentOffset),
+          null); // TODO figure out how to determine cause or if this is even needed on web.
+
+      // hacky implementation, but don't know of a non-JS solution to disable
+      // selection while keeping the input enabled for mouse + key events.
+      // We adjust the selection if readOnly is set because the readOnly attribute
+      // will take care of the disabled behavior
+      if (widget.enableInteractiveSelection == false && !widget.readOnly) {
         _inputElement!.selectionStart = _inputElement!.selectionEnd;
-      });
-    }
+      }
+    });
 
     // register platform view
     // ignore: undefined_prefixed_name
@@ -670,6 +711,246 @@ class _NativeInputState extends State<NativeInput> {
       case TextInputAction.unspecified:
       default:
         return null;
+    }
+  }
+
+  // override if we extend
+  void performAction(TextInputAction action) {
+    switch (action) {
+      case TextInputAction.newline:
+        // If this is a multiline EditableText, do nothing for a "newline"
+        // action; The newline is already inserted. Otherwise, finalize
+        // editing.
+        if (_maxLines == 1) {
+          _finalizeEditing(action, shouldUnfocus: true);
+        }
+      case TextInputAction.done:
+      case TextInputAction.go:
+      case TextInputAction.next:
+      case TextInputAction.previous:
+      case TextInputAction.search:
+      case TextInputAction.send:
+        _finalizeEditing(action, shouldUnfocus: true);
+      case TextInputAction.continueAction:
+      case TextInputAction.emergencyCall:
+      case TextInputAction.join:
+      case TextInputAction.none:
+      case TextInputAction.route:
+      case TextInputAction.unspecified:
+        // Finalize editing, but don't give up focus because this keyboard
+        // action does not imply the user is done inputting information.
+        _finalizeEditing(action, shouldUnfocus: false);
+    }
+  }
+
+  void _finalizeEditing(TextInputAction action, {required bool shouldUnfocus}) {
+    // Take any actions necessary now that the user has completed editing.
+    if (widget.onEditingComplete != null) {
+      try {
+        widget.onEditingComplete!();
+      } catch (exception, stack) {
+        FlutterError.reportError(FlutterErrorDetails(
+          exception: exception,
+          stack: stack,
+          library: 'widgets',
+          context:
+              ErrorDescription('while calling onEditingComplete for $action'),
+        ));
+      }
+    } else {
+      // Default behavior if the developer did not provide an
+      // onEditingComplete callback: Finalize editing and remove focus, or move
+      // it to the next/previous field, depending on the action.
+      // widget.controller.clearComposing();
+      if (shouldUnfocus) {
+        switch (action) {
+          case TextInputAction.none:
+          case TextInputAction.unspecified:
+          case TextInputAction.done:
+          case TextInputAction.go:
+          case TextInputAction.search:
+          case TextInputAction.send:
+          case TextInputAction.continueAction:
+          case TextInputAction.join:
+          case TextInputAction.route:
+          case TextInputAction.emergencyCall:
+          case TextInputAction.newline:
+            widget.focusNode.unfocus();
+          case TextInputAction.next:
+            widget.focusNode.nextFocus();
+          case TextInputAction.previous:
+            widget.focusNode.previousFocus();
+        }
+      }
+    }
+
+    final ValueChanged<String>? onSubmitted = widget.onSubmitted;
+    if (onSubmitted == null) {
+      return;
+    }
+
+    // Invoke optional callback with the user's submitted content.
+    try {
+      onSubmitted(getElementValue());
+    } catch (exception, stack) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: exception,
+        stack: stack,
+        library: 'widgets',
+        context: ErrorDescription('while calling onSubmitted for $action'),
+      ));
+    }
+
+    // If `shouldUnfocus` is true, the text field should no longer be focused
+    // after the microtask queue is drained. But in case the developer cancelled
+    // the focus change in the `onSubmitted` callback by focusing this input
+    // field again, reset the soft keyboard.
+    // See https://github.com/flutter/flutter/issues/84240.
+    //
+    // `_restartConnectionIfNeeded` creates a new TextInputConnection to replace
+    // the current one. This on iOS switches to a new input view and on Android
+    // restarts the input method, and in both cases the soft keyboard will be
+    // reset.
+    // if (shouldUnfocus) {
+    //   _scheduleRestartConnection();
+    // }
+  }
+
+  void _handleSelectionChanged(
+      TextSelection selection, SelectionChangedCause? cause) {
+    try {
+      widget.onSelectionChanged?.call(selection, cause);
+    } catch (exception, stack) {
+      FlutterError.reportError(FlutterErrorDetails(
+        exception: exception,
+        stack: stack,
+        library: 'widgets',
+        context:
+            ErrorDescription('while calling onSelectionChanged for $cause'),
+      ));
+    }
+  }
+
+    /// The default behavior used if [onTapOutside] is null.
+  /// TODO: Fix this once we move to framework  
+  /// The `event` argument is the [PointerDownEvent] that caused the notification.
+  void _defaultOnTapOutside(PointerDownEvent event) {
+    /// The focus dropping behavior is only present on desktop platforms
+    /// and mobile browsers.
+
+    widget.focusNode.unfocus();
+  }
+  
+  String _getAutocompleteAttribute(String autofillHint) {
+    switch(autofillHint) {
+      case AutofillHints.birthday: 
+        return 'bday';
+      case AutofillHints.birthdayDay:
+        return 'bday-day';
+      case AutofillHints.birthdayMonth:
+        return 'bday-month';
+      case AutofillHints.birthdayYear:
+        return 'bday-year';
+      case AutofillHints.countryCode:
+        return 'country';
+      case AutofillHints.countryName:
+        return 'country-name';
+      case AutofillHints.creditCardExpirationDate:
+        return 'cc-exp';
+      case AutofillHints.creditCardExpirationMonth:
+        return 'cc-exp-month';
+      case AutofillHints.creditCardExpirationYear:
+        return 'cc-exp-year';
+      case AutofillHints.creditCardFamilyName:
+        return 'cc-family-name';
+      case AutofillHints.creditCardGivenName:
+        return 'cc-given-name';
+      case AutofillHints.creditCardMiddleName:
+        return 'cc-additional-name';
+      case AutofillHints.creditCardName:
+        return 'cc-name';
+      case AutofillHints.creditCardNumber:
+        return 'cc-number';
+      case AutofillHints.creditCardSecurityCode:
+        return 'cc-csc';
+      case AutofillHints.creditCardType:
+        return 'cc-type';
+      case AutofillHints.email:
+        return 'email';
+      case AutofillHints.familyName:
+        return 'family-name';
+      case AutofillHints.fullStreetAddress:
+        return 'street-address';
+      case AutofillHints.gender:
+        return 'sex';
+      case AutofillHints.givenName:
+        return 'given-name';
+      case AutofillHints.impp:
+        return 'impp';
+      case AutofillHints.jobTitle:
+        return 'organization-title';
+      case AutofillHints.middleName:
+        return 'middleName';
+      case AutofillHints.name:
+        return 'name';
+      case AutofillHints.namePrefix:
+        return 'honorific-prefix';
+      case AutofillHints.nameSuffix:
+        return 'honorific-suffix';
+      case AutofillHints.newPassword:
+        return 'new-password';
+      case AutofillHints.nickname:
+        return 'nickname';
+      case AutofillHints.oneTimeCode:
+        return 'one-time-code';
+      case AutofillHints.organizationName:
+        return 'organization';
+      case AutofillHints.password:
+        return 'current-password';
+      case AutofillHints.photo:
+        return 'photo';
+      case AutofillHints.postalCode:
+        return 'postal-code';
+      case AutofillHints.streetAddressLevel1:
+        return 'address-level1';
+      case AutofillHints.streetAddressLevel2:
+        return 'address-level2';
+      case AutofillHints.streetAddressLevel3:
+        return 'address-level3';
+      case AutofillHints.streetAddressLevel4:
+        return 'address-level4';
+      case AutofillHints.streetAddressLine1:
+        return 'address-line1';
+      case AutofillHints.streetAddressLine2:
+        return 'address-line2';
+      case AutofillHints.streetAddressLine3:
+        return 'address-line3';
+      case AutofillHints.telephoneNumber:
+        return 'tel';
+      case AutofillHints.telephoneNumberAreaCode:
+        return 'tel-area-code';
+      case AutofillHints.telephoneNumberCountryCode:
+        return 'tel-country-code';
+      case AutofillHints.telephoneNumberExtension:
+        return 'tel-extension';
+      case AutofillHints.telephoneNumberLocal:
+        return 'tel-local';
+      case AutofillHints.telephoneNumberLocalPrefix:
+        return 'tel-local-prefix';
+      case AutofillHints.telephoneNumberLocalSuffix:
+        return 'tel-local-suffix';
+      case AutofillHints.telephoneNumberNational:
+        return 'tel-national';
+      case AutofillHints.transactionAmount:
+        return 'transaction-amount';
+      case AutofillHints.transactionCurrency:
+        return 'transaction-currency';
+      case AutofillHints.url:
+        return 'url';
+      case AutofillHints.username:
+        return 'username';
+      default:
+        return autofillHint;
     }
   }
 
